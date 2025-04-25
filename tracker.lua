@@ -1,18 +1,20 @@
 -- tracker.lua
--- this is the code you host at:
--- https://raw.githubusercontent.com/YourUser/YourRepo/main/tracker.lua
+-- expects these globals:
+--   _G.groupId    = <number>  — the Group you want to track
+--   _G.groupName  = <string>  — label for notifications
+--   _G.minRank    = <number>  — optional: only alert for rank >= this
 
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local localPlayer  = Players.LocalPlayer
 local playerGui    = localPlayer:WaitForChild("PlayerGui")
 
--- one ScreenGui for all notifications
+-- container for all toasts
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name   = "TrackerNotifications"
+screenGui.Name   = "GroupTrackerNotifications"
 screenGui.Parent = playerGui
 
--- slide-in/out toaster
+-- makes and plays a slide-in/out notification
 local function showNotification(titleText, bodyText)
     local frame = Instance.new("Frame")
     frame.Size               = UDim2.new(0, 300, 0, 80)
@@ -62,38 +64,8 @@ local function showNotification(titleText, bodyText)
     frame:Destroy()
 end
 
--- lookup by UserId against global tables
-local function getRole(uid)
-    if     table.find(_G.eventStaff  or {}, uid) then return "Event Staff" end
-    if     table.find(_G.moderators  or {}, uid) then return "Moderator"   end
-    if     table.find(_G.admins      or {}, uid) then return "Admin"       end
-    return nil
-end
-
--- initial scan
-do
-    local found = {}
-    for _, plr in ipairs(Players:GetPlayers()) do
-        local role = getRole(plr.UserId)
-        if role then
-            table.insert(found, string.format("[%s] %s", role, plr.Name))
-        end
-    end
-    if #found > 0 then
-        showNotification(
-            "Tracked Users Online",
-            string.format("%d in server:\n%s", #found, table.concat(found, ", "))
-        )
-    else
-        showNotification("Tracked Users Online", "None of your tracked IDs are here.")
-    end
-end
-
--- listen for new joins
-Players.PlayerAdded:Connect(function(plr)
-    plr.CharacterAdded:Wait()
-    local role = getRole(plr.UserId)
-    if role then
-        showNotification("Tracked User Joined", string.format("[%s] %s has joined!", role, plr.Name))
-    end
-end)
+-- returns true plus (rankNumber, roleName) if they meet your criteria
+local function isWatcher(plr)
+    local gid   = _G.groupId
+    if not plr:IsInGroup(gid) then
+        return false
