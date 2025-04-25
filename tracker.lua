@@ -1,232 +1,295 @@
 -- tracker.lua
--- Globals expected before loading:
+-- Globals to set before loading:
 --   _G.groupId    = <number>
 --   _G.groupName  = <string>
 --   _G.minRank    = <number>
 
-local Players    = game:GetService("Players")
-local TweenSvc   = game:GetService("TweenService")
-local ContextAS  = game:GetService("ContextActionService")
-local HttpSvc    = game:GetService("HttpService")
-local UserInput  = game:GetService("UserInputService")
+local Players      = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local ContextAS    = game:GetService("ContextActionService")
+local HttpService  = game:GetService("HttpService")
+local UserInput    = game:GetService("UserInputService")
 
--- Create main ScreenGui
+-- Main ScreenGui
 local gui = Instance.new("ScreenGui")
-gui.Name = "GroupTracker"
+gui.Name        = "GroupTracker"
 gui.ResetOnSpawn = false
-gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+gui.Parent      = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Utility: rounded frames
+-- Utility to make rounded frames
 local function makeFrame(size, pos, parent)
     local f = Instance.new("Frame", parent)
-    f.Size, f.Position = size, pos
-    f.AnchorPoint = Vector2.new(0.5,0.5)
-    f.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    f.Size               = size
+    f.Position           = pos
+    f.AnchorPoint        = Vector2.new(0.5, 0.5)
+    f.BackgroundColor3   = Color3.fromRGB(30, 30, 30)
     f.BackgroundTransparency = 0.1
     local uc = Instance.new("UICorner", f)
-    uc.CornerRadius = UDim.new(0,12)
+    uc.CornerRadius = UDim.new(0, 12)
     return f
 end
 
--- 1) Notification
+-- 1) Sliding Notification
 local function notify(title, body)
-    local nf = makeFrame(UDim2.new(0,450,0,120), UDim2.new(0.5,0,-0.5,0), gui)
+    local nf = makeFrame(UDim2.new(0, 450, 0, 120), UDim2.new(0.5, 0, -0.5, 0), gui)
+    -- Title
     local titleLbl = Instance.new("TextLabel", nf)
-    titleLbl.Size = UDim2.new(1,-40,0,30)
-    titleLbl.Position = UDim2.new(0,20,0,10)
+    titleLbl.Size               = UDim2.new(1, -40, 0, 30)
+    titleLbl.Position           = UDim2.new(0, 20, 0, 10)
     titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = title
-    titleLbl.Font = Enum.Font.SourceSansBold
-    titleLbl.TextSize = 24
-    titleLbl.TextColor3 = Color3.new(1,1,1)
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Font               = Enum.Font.SourceSansBold
+    titleLbl.TextSize           = 24
+    titleLbl.TextColor3         = Color3.new(1, 1, 1)
+    titleLbl.Text               = title
+    titleLbl.TextXAlignment     = Enum.TextXAlignment.Left
 
+    -- Body
     local bodyLbl = Instance.new("TextLabel", nf)
-    bodyLbl.Size = UDim2.new(1,-40,1,-60)
-    bodyLbl.Position = UDim2.new(0,20,0,50)
+    bodyLbl.Size               = UDim2.new(1, -40, 1, -60)
+    bodyLbl.Position           = UDim2.new(0, 20, 0, 50)
     bodyLbl.BackgroundTransparency = 1
-    bodyLbl.Text = body
-    bodyLbl.Font = Enum.Font.SourceSans
-    bodyLbl.TextSize = 18
-    bodyLbl.TextColor3 = Color3.new(1,1,1)
-    bodyLbl.TextWrapped = true
-    bodyLbl.TextXAlignment = Enum.TextXAlignment.Left
+    bodyLbl.Font               = Enum.Font.SourceSans
+    bodyLbl.TextSize           = 18
+    bodyLbl.TextColor3         = Color3.new(1, 1, 1)
+    bodyLbl.TextWrapped        = true
+    bodyLbl.Text               = body
+    bodyLbl.TextXAlignment     = Enum.TextXAlignment.Left
 
+    -- OK Button
     local okBtn = Instance.new("TextButton", nf)
-    okBtn.Size = UDim2.new(0,60,0,30)
-    okBtn.Position = UDim2.new(1,-70,1,-40)
-    okBtn.Text = "OK"
-    okBtn.Font = Enum.Font.SourceSansBold
-    okBtn.TextSize = 18
-    okBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    okBtn.BorderSizePixel = 0
+    okBtn.Size               = UDim2.new(0, 60, 0, 30)
+    okBtn.Position           = UDim2.new(1, -70, 1, -40)
+    okBtn.Text               = "OK"
+    okBtn.Font               = Enum.Font.SourceSansBold
+    okBtn.TextSize           = 18
+    okBtn.BackgroundColor3   = Color3.fromRGB(50, 50, 50)
+    okBtn.BorderSizePixel    = 0
     local okCorner = Instance.new("UICorner", okBtn)
-    okCorner.CornerRadius = UDim.new(0,8)
+    okCorner.CornerRadius = UDim.new(0, 8)
     okBtn.MouseButton1Click:Connect(function()
-        TweenSvc:Create(nf, TweenInfo.new(0.4,Enum.EasingStyle.Quad,Enum.EasingDirection.In),{
-            Position = UDim2.new(0.5,0,-0.5,0)
+        TweenService:Create(nf, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Position = UDim2.new(0.5, 0, -0.5, 0)
         }):Play():Completed:Wait()
         nf:Destroy()
     end)
 
-    -- Slide in
-    TweenSvc:Create(nf, TweenInfo.new(0.6,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{
-        Position = UDim2.new(0.5,0,0.2,0)
+    -- Slide In
+    TweenService:Create(nf, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, 0, 0.2, 0)
     }):Play()
 end
 
--- 2) Fetch all group members (paginated)
-local function fetchGroupMembers()
-    local members = {}
-    local cursor = nil
-    repeat
-        local url = ("https://groups.roblox.com/v1/groups/%d/users?limit=100"):format(_G.groupId)
-        if cursor then url = url .. "&cursor=" .. cursor end
-        local res = HttpSvc:GetAsync(url)
-        local data = HttpSvc:JSONDecode(res)
-        for _,m in ipairs(data.data) do
-            table.insert(members, m)
-        end
-        cursor = data.nextPageCursor
-    until not cursor
-    return members
+-- Helper: check if player should be tracked
+local function isWatcher(plr)
+    if not plr:IsInGroup(_G.groupId) then return false end
+    local rankNum = plr:GetRankInGroup(_G.groupId)
+    if rankNum < (_G.minRank or 0) then return false end
+    return true, rankNum, plr:GetRoleInGroup(_G.groupId)
 end
 
--- 3) Status Panel
-local panel = makeFrame(UDim2.new(0,360,0,500), UDim2.new(0.5,0,0.5,0), gui)
-panel.Visible = false
-
--- make draggable :contentReference[oaicite:10]{index=10}
-do
-    local dragging, dragInput, dragStart, startPos
-    panel.InputBegan:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = inp.Position
-            startPos = panel.Position
-            inp.Changed:Connect(function()
-                if inp.UserInputState==Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    panel.InputChanged:Connect(function(inp)
-        if inp.UserInputType==Enum.UserInputType.MouseMovement then
-            dragInput = inp
-        end
-    end)
-    UserInput.InputChanged:Connect(function(inp)
-        if inp==dragInput and dragging then
-            local delta = inp.Position - dragStart
-            panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+delta.X,
-                                       startPos.Y.Scale, startPos.Y.Offset+delta.Y)
-        end
-    end)
-end
-
--- Panel contents
-local function buildPanel()
-    panel:ClearAllChildren()
-    local close = Instance.new("TextButton", panel)
-    close.Size, close.Position = UDim2.new(0,24,0,24), UDim2.new(1,-30,0,6)
-    close.BackgroundTransparency = 1
-    close.Text, close.Font, close.TextSize = "✕", Enum.Font.SourceSansBold, 18
-    close.TextColor3 = Color3.new(1,0.5,0.5)
-    close.MouseButton1Click:Connect(function() panel.Visible=false end)
-
-    local title = Instance.new("TextLabel", panel)
-    title.Size, title.Position = UDim2.new(1,-40,0,30), UDim2.new(0,20,0,0)
-    title.BackgroundTransparency = 1
-    title.Font, title.TextSize = Enum.Font.SourceSansBold, 20
-    title.TextColor3 = Color3.new(1,1,1)
-    title.Text = (_G.groupName or "Group").." Status"
-
-    local scroll = Instance.new("ScrollingFrame", panel)
-    scroll.Size, scroll.Position = UDim2.new(1,-20,1,-60), UDim2.new(0,10,0,40)
-    scroll.BackgroundTransparency = 1
-    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y :contentReference[oaicite:11]{index=11}
-    scroll.ScrollBarImageTransparency = 0.5
-    local layout = Instance.new("UIListLayout", scroll)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder :contentReference[oaicite:12]{index=12}
-    layout.Padding = UDim.new(0,6)
-
-    -- Fetch and categorize
-    local members = fetchGroupMembers()
-    local cats = {}  -- e.g. {["Admins"]={},["Moderators"]={}}
-    for _,m in ipairs(members) do
-        local roleName = m.role.name
-        cats[roleName] = cats[roleName] or {}
-        table.insert(cats[roleName], m)
-    end
-
-    local y = 1
-    for roleName, tbl in pairs(cats) do
-        -- category header
-        local header = Instance.new("TextLabel", scroll)
-        header.Size, header.LayoutOrder = UDim2.new(1,0,0,30), y; y+=1
-        header.BackgroundTransparency = 1
-        header.Font, header.TextSize, header.TextColor3 =
-            Enum.Font.SourceSansBold, 18, Color3.new(0.8,0.8,1)
-        header.Text = roleName
-
-        for _,m in ipairs(tbl) do
-            -- entry
-            local f = Instance.new("Frame", scroll)
-            f.Size, f.LayoutOrder = UDim2.new(1,0,0,40), y; y+=1
-            f.BackgroundTransparency = 0.2
-            local uc = Instance.new("UICorner", f)
-            uc.CornerRadius = UDim.new(0,6)
-
-            local lbl = Instance.new("TextLabel", f)
-            lbl.Size, lbl.Position = UDim2.new(0.8,0,1,0), UDim2.new(0,10,0,0)
-            lbl.BackgroundTransparency = 1
-            lbl.Font, lbl.TextSize = Enum.Font.SourceSans, 16
-            lbl.TextColor3 = Color3.new(1,1,1)
-            lbl.Text = ("%s [%d]"):format(m.user.username, m.user.id)
-
-            local icon = Instance.new("TextLabel", f)
-            icon.Size, icon.Position = UDim2.new(0,24,0,8), UDim2.new(1,-34,0,0)
-            icon.BackgroundTransparency = 1
-            icon.Font, icon.TextSize = Enum.Font.SourceSansBold = Enum.Font.SourceSansBold, 24
-            -- status
-            local inGame = Players:GetPlayerByUserId(m.user.id)~=nil
-            icon.TextColor3 = inGame and Color3.new(0,1,0) or Color3.new(0.5,0.5,0.5)
-            icon.Text = inGame and "🟢" or "⚪"
-        end
-    end
-end
-
--- Toggle panel with K
-ContextAS:BindAction("TogglePanel", function(_,state)
-    if state==Enum.UserInputState.Begin then
-        panel.Visible = not panel.Visible
-        if panel.Visible then buildPanel() end
-    end
-    return Enum.ContextActionResult.Sink
-end, false, Enum.KeyCode.K)
-
--- 4) Loader-based server-hop: simply re-run loader on each injection
-
--- Initial notification: who’s here?
+-- Initial “who’s here” notification
 do
     local present = {}
-    for _,plr in ipairs(Players:GetPlayers()) do
-        if plr:IsInGroup(_G.groupId) and plr:GetRankInGroup(_G.groupId)>=(_G.minRank or 0) then
-            table.insert(present, ("%s #%d"):format(plr.Name, plr:GetRankInGroup(_G.groupId)))
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ok, rankNum, roleName = isWatcher(plr)
+        if ok then
+            table.insert(present, string.format("%s (%s #%d)", plr.Name, roleName, rankNum))
         end
     end
-    if #present>0 then
+    if #present > 0 then
         notify((_G.groupName or "Group").." Online",
-               ("Present: %d\n%s"):format(#present, table.concat(present,"\n")))
+               ("Present: %d\n%s"):format(#present, table.concat(present, "\n")))
     end
 end
 
 -- Live join alerts
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Wait()
-    if plr:IsInGroup(_G.groupId) and plr:GetRankInGroup(_G.groupId)>=(_G.minRank or 0) then
+    local ok, rankNum, roleName = isWatcher(plr)
+    if ok then
         notify((_G.groupName or "Group").." Joined",
-               ("%s #%d has joined!"):format(plr.Name, plr:GetRankInGroup(_G.groupId)))
+               string.format("%s (%s #%d) has joined!", plr.Name, roleName, rankNum))
     end
 end)
+
+-- 2) Status Panel
+
+-- Panel frame
+local panel = makeFrame(UDim2.new(0, 360, 0, 500), UDim2.new(0.5, 0, 0.5, 0), gui)
+panel.Visible = false
+
+-- Draggable setup
+do
+    local dragging, dragInput, dragStart, startPos
+    panel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = panel.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    panel.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    UserInput.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            panel.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- Build panel contents
+local function buildPanel()
+    -- Clear old entries
+    for _, child in ipairs(panel:GetChildren()) do
+        if child.Name == "Entry" or child:IsA("ScrollingFrame") or child:IsA("UIListLayout") then
+            child:Destroy()
+        end
+    end
+
+    -- Close button
+    local closeBtn = Instance.new("TextButton", panel)
+    closeBtn.Name  = "Close"
+    closeBtn.Size  = UDim2.new(0, 24, 0, 24)
+    closeBtn.Position = UDim2.new(1, -30, 0, 6)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Font  = Enum.Font.SourceSansBold
+    closeBtn.Text  = "✕"
+    closeBtn.TextColor3 = Color3.new(1, 0.5, 0.5)
+    closeBtn.TextSize = 18
+    closeBtn.MouseButton1Click:Connect(function()
+        panel.Visible = false
+    end)
+
+    -- Title
+    local title = Instance.new("TextLabel", panel)
+    title.Size  = UDim2.new(1, -40, 0, 30)
+    title.Position = UDim2.new(0, 20, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.SourceSansBold
+    title.TextSize = 20
+    title.TextColor3 = Color3.new(1, 1, 1)
+    title.Text = (_G.groupName or "Group").." Status"
+
+    -- ScrollingFrame
+    local scroll = Instance.new("ScrollingFrame", panel)
+    scroll.Name                 = "Scroll"
+    scroll.Size                 = UDim2.new(1, -20, 1, -60)
+    scroll.Position             = UDim2.new(0, 10, 0, 40)
+    scroll.BackgroundTransparency= 1
+    scroll.AutomaticCanvasSize  = Enum.AutomaticSize.Y
+    scroll.ScrollBarImageTransparency = 0.5
+
+    local layout = Instance.new("UIListLayout", scroll)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding   = UDim.new(0, 6)
+
+    -- Fetch and categorize via Groups API
+    local members = {}
+    local cursor
+    repeat
+        local url = ("https://groups.roblox.com/v1/groups/%d/users?limit=100%s")
+            :format(_G.groupId, cursor and "&cursor="..cursor or "")
+        local res  = game:HttpGet(url, true)
+        local data = HttpService:JSONDecode(res)
+        for _, m in ipairs(data.data) do
+            table.insert(members, m)
+        end
+        cursor = data.nextPageCursor
+    until not cursor
+
+    -- Organize by role name
+    local categories = {}
+    for _, m in ipairs(members) do
+        local role = m.role.name
+        categories[role] = categories[role] or {}
+        table.insert(categories[role], m)
+    end
+
+    -- Populate entries
+    local order = 1
+    for role, tbl in pairs(categories) do
+        -- Category header
+        local hdr = Instance.new("TextLabel", scroll)
+        hdr.Name        = "Entry"
+        hdr.LayoutOrder = order
+        order = order + 1
+        hdr.Size        = UDim2.new(1, 0, 0, 30)
+        hdr.BackgroundTransparency = 1
+        hdr.Font        = Enum.Font.SourceSansBold
+        hdr.TextSize    = 18
+        hdr.TextColor3  = Color3.new(0.8, 0.8, 1)
+        hdr.Text        = role
+
+        -- Each member
+        for _, m in ipairs(tbl) do
+            local frm = Instance.new("Frame", scroll)
+            frm.Name        = "Entry"
+            frm.LayoutOrder = order
+            order = order + 1
+            frm.Size        = UDim2.new(1, 0, 0, 40)
+            frm.BackgroundTransparency = 0.2
+            local uc = Instance.new("UICorner", frm)
+            uc.CornerRadius = UDim.new(0, 6)
+
+            -- Text label
+            local lbl = Instance.new("TextLabel", frm)
+            lbl.Size               = UDim2.new(0.8, -10, 1, 0)
+            lbl.Position           = UDim2.new(0, 10, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.Font               = Enum.Font.SourceSans
+            lbl.TextSize           = 16
+            lbl.TextColor3         = Color3.new(1, 1, 1)
+            lbl.Text               = ("%s [%d]"):format(m.user.username, m.user.id)
+
+            -- Status icon
+            local icon = Instance.new("TextLabel", frm)
+            icon.Size               = UDim2.new(0, 24, 0, 24)
+            icon.Position           = UDim2.new(1, -34, 0, 8)
+            icon.BackgroundTransparency = 1
+            icon.Font               = Enum.Font.SourceSansBold
+            icon.TextSize           = 24
+
+            local plrObj = Players:GetPlayerByUserId(m.user.id)
+            if plrObj then
+                icon.TextColor3 = Color3.new(0, 1, 0) -- online in game
+                icon.Text       = "🟢"
+            else
+                icon.TextColor3 = Color3.new(0.5, 0.5, 0.5) -- offline
+                icon.Text       = "⚪"
+            end
+        end
+    end
+end
+
+-- Toggle panel with K
+ContextAS:BindAction("ToggleStatus", function(_, state)
+    if state == Enum.UserInputState.Begin then
+        panel.Visible = not panel.Visible
+        if panel.Visible then
+            buildPanel()
+            -- Slide in from top
+            panel.Position = UDim2.new(0.5, 0, -0.5, 0)
+            TweenService:Create(panel, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Position = UDim2.new(0.5, 0, 0.5, 0)
+            }):Play()
+        else
+            -- Slide out to top
+            TweenService:Create(panel, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Position = UDim2.new(0.5, 0, -0.5, 0)
+            }):Play():Completed:Wait()
+        end
+    end
+    return Enum.ContextActionResult.Sink
+end, false, Enum.KeyCode.K)
