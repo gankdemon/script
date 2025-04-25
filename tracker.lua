@@ -1,184 +1,211 @@
 -- tracker.lua
--- Global configuration (set via your local loader before calling this):
---   _G.groupId    = <number>    -- Roblox Group ID to watch
---   _G.groupName  = <string>    -- Label for notifications
---   _G.minRank    = <number>    -- Optional: alert for ranks >= this (default 0)
+-- Globals expected before loading:
+--   _G.groupId    = <number>  -- your group (e.g. 32704720)
+--   _G.groupName  = <string>  -- label (e.g. "My Team")
+--   _G.minRank    = <number>  -- only include players at or above this rank
 
-local Players       = game:GetService("Players")
-local TweenService  = game:GetService("TweenService")
-local RunService    = game:GetService("RunService")
-local HttpService   = game:GetService("HttpService")
+-- Services
+local Players            = game:GetService("Players")
+local TweenService       = game:GetService("TweenService")
+local ContextActionSvc   = game:GetService("ContextActionService")
 
-local groupId       = _G.groupId
-local groupName     = _G.groupName or ("Group " .. tostring(groupId))
-local minRank       = _G.minRank or 0
-
-local localPlayer   = Players.LocalPlayer
-local playerGui     = localPlayer:WaitForChild("PlayerGui")
-
--- Persistent GUI container
+-- Main GUI container
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name   = "GroupTracker"
-screenGui.Parent = playerGui
+screenGui.ResetOnSpawn = false
+screenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
--- Store last place for server-hop detection
-local lastPlaceId = game.PlaceId
+-- Utility: create rounded frame
+local function makeRoundedFrame(parent, size, pos)
+    local f = Instance.new("Frame")
+    f.Size               = size
+    f.Position           = pos
+    f.BackgroundColor3   = Color3.fromRGB(30, 30, 30)
+    f.BackgroundTransparency = 0.1
+    f.AnchorPoint        = Vector2.new(0.5, 0)
+    f.Parent             = parent
 
--- Notification factory
-local function makeNotification(titleText, bodyText)
-    -- Frame
-    local frame = Instance.new("Frame")
-    frame.Size               = UDim2.new(0, 350, 0, 100)
-    frame.Position           = UDim2.new(1, 10, 0, 50)
-    frame.AnchorPoint        = Vector2.new(1, 0)
-    frame.BackgroundColor3   = Color3.fromRGB(25, 25, 25)
-    frame.BackgroundTransparency = 0.1
-    frame.Parent             = screenGui
+    local corner = Instance.new("UICorner")  -- smooth edges :contentReference[oaicite:5]{index=5}
+    corner.CornerRadius   = UDim.new(0, 12)
+    corner.Parent         = f
+
+    return f
+end
+
+-- 1️⃣ Sliding Notification (persistent until X clicked)
+local function showNotification(title, body)
+    -- build
+    local notif = makeRoundedFrame(screenGui, UDim2.new(0, 400, 0, 100), UDim2.new(0.5, 0, 0, -120))
+    notif.ZIndex    = 10
+
+    -- Title
+    local tLab = Instance.new("TextLabel")
+    tLab.Size              = UDim2.new(1, -40, 0, 30)
+    tLab.Position          = UDim2.new(0, 20, 0, 10)
+    tLab.BackgroundTransparency = 1
+    tLab.Font              = Enum.Font.SourceSansBold
+    tLab.TextSize          = 22
+    tLab.TextColor3        = Color3.new(1,1,1)
+    tLab.Text              = title
+    tLab.TextXAlignment    = Enum.TextXAlignment.Left
+    tLab.Parent            = notif
+
+    -- Body
+    local bLab = Instance.new("TextLabel")
+    bLab.Size              = UDim2.new(1, -40, 1, -50)
+    bLab.Position          = UDim2.new(0, 20, 0, 45)
+    bLab.BackgroundTransparency = 1
+    bLab.Font              = Enum.Font.SourceSans
+    bLab.TextSize          = 16
+    bLab.TextColor3        = Color3.new(1,1,1)
+    bLab.TextWrapped       = true
+    bLab.Text              = body
+    bLab.TextXAlignment    = Enum.TextXAlignment.Left
+    bLab.Parent            = notif
 
     -- Close button
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size               = UDim2.new(0, 20, 0, 20)
-    closeBtn.Position           = UDim2.new(1, -25, 0, 5)
+    closeBtn.Size          = UDim2.new(0, 24, 0, 24)
+    closeBtn.Position      = UDim2.new(1, -30, 0, 6)
     closeBtn.BackgroundTransparency = 1
-    closeBtn.Font               = Enum.Font.SourceSansBold
-    closeBtn.TextSize           = 18
-    closeBtn.TextColor3         = Color3.fromRGB(200, 200, 200)
-    closeBtn.Text               = "✕"
-    closeBtn.Parent             = frame
+    closeBtn.Font          = Enum.Font.SourceSansBold
+    closeBtn.TextSize      = 18
+    closeBtn.TextColor3    = Color3.new(1,0.3,0.3)
+    closeBtn.Text          = "✕"
+    closeBtn.Parent        = notif
     closeBtn.MouseButton1Click:Connect(function()
-        frame:Destroy()
+        notif:Destroy()
     end)
 
-    -- Title
-    local title = Instance.new("TextLabel")
-    title.Size               = UDim2.new(1, -40, 0, 25)
-    title.Position           = UDim2.new(0, 10, 0, 5)
-    title.BackgroundTransparency = 1
-    title.Font               = Enum.Font.SourceSansBold
-    title.TextSize           = 20
-    title.TextColor3         = Color3.new(1,1,1)
-    title.Text               = titleText
-    title.TextXAlignment     = Enum.TextXAlignment.Left
-    title.Parent             = frame
-
-    -- Body
-    local body = Instance.new("TextLabel")
-    body.Size                = UDim2.new(1, -20, 1, -40)
-    body.Position            = UDim2.new(0, 10, 0, 30)
-    body.BackgroundTransparency = 1
-    body.Font                = Enum.Font.SourceSans
-    body.TextSize            = 16
-    body.TextColor3          = Color3.new(1,1,1)
-    body.TextWrapped         = true
-    body.Text                = bodyText
-    body.TextXAlignment      = Enum.TextXAlignment.Left
-    body.Parent              = frame
-
-    -- Tween in
-    TweenService:Create(frame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Position = UDim2.new(1, -10, 0, 50)
-    }):Play()
-
-    return frame
+    -- slide in
+    notif.Position = UDim2.new(0.5, 0, 0, -120)
+    TweenService:Create(notif, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0.5, 0, 0, 20)
+    }):Play()  -- smooth slide :contentReference[oaicite:6]{index=6}
 end
 
--- Check membership and rank+role
-local function checkMember(plr)
-    if not plr:IsInGroup(groupId) then return false end
-    local rankNum  = plr:GetRankInGroup(groupId)
-    if rankNum < minRank then return false end
-    local roleName = plr:GetRoleInGroup(groupId)
-    return true, rankNum, roleName
+-- Helper: determine watch criteria
+local function isWatcher(plr)
+    if not plr:IsInGroup(_G.groupId) then return false end
+    local rankN = plr:GetRankInGroup(_G.groupId)
+    if rankN < (_G.minRank or 0) then return false end
+    return true, rankN, plr:GetRoleInGroup(_G.groupId)
 end
 
--- Initial scan or on-server-hop scan
+-- Initial scan + notification
 do
     local found = {}
     for _, plr in ipairs(Players:GetPlayers()) do
-        local ok, rnum, rname = checkMember(plr)
+        local ok, rankN, role = isWatcher(plr)
         if ok then
-            table.insert(found, string.format("%s (%s #%d)", plr.Name, rname, rnum))
+            table.insert(found, string.format("%s (%s #%d)", plr.Name, role, rankN))
         end
     end
-    local notif
-    if #found > 0 then
-        notif = makeNotification(groupName .. " Online", string.format("%d members here:\n%s", #found, table.concat(found, ", ")))
-    else
-        notif = makeNotification(groupName .. " Online", "None present.")
+    if #found>0 then
+        showNotification(
+            (_G.groupName or "Group").." Online",
+            string.format("%d present:\n%s", #found, table.concat(found, "\n "))
+        )
     end
-    -- no auto destroy; user closes via X
 end
 
--- Real-time join alerts
+-- Live join alerts
 Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Wait()
-    local ok, rnum, rname = checkMember(plr)
+    local ok, rankN, role = isWatcher(plr)
     if ok then
-        makeNotification(groupName .. " Join", string.format("%s (%s #%d) joined!", plr.Name, rname, rnum))
+        showNotification(
+            (_G.groupName or "Group").." Joined",
+            string.format("%s (%s #%d) has joined!", plr.Name, role, rankN)
+        )
     end
 end)
 
--- Server-hop detection
-RunService.Heartbeat:Connect(function()
-    if game.PlaceId ~= lastPlaceId then
-        lastPlaceId = game.PlaceId
-        -- re-run initial scan notification
-        local found = {}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            local ok, rnum, rname = checkMember(plr)
-            if ok then
-                table.insert(found, string.format("%s (%s #%d)", plr.Name, rname, rnum))
-            end
-        end
-        if #found > 0 then
-            makeNotification(groupName .. " Online", string.format("%d members here:\n%s", #found, table.concat(found, ", ")))
-        end
-    end
+-- 2️⃣ Status Panel (toggle with K)
+local panelOpen = false
+local panel = makeRoundedFrame(screenGui, UDim2.new(0, 300, 0, 400), UDim2.new(0, 10, 0, 60))
+panel.Visible = false
+
+-- Close X for panel
+local pClose = Instance.new("TextButton", panel)
+pClose.Size = UDim2.new(0, 24, 0, 24)
+pClose.Position = UDim2.new(1, -30, 0, 6)
+pClose.BackgroundTransparency = 1
+pClose.Font = Enum.Font.SourceSansBold
+pClose.TextSize = 18
+pClose.TextColor3 = Color3.new(1,0.3,0.3)
+pClose.Text = "✕"
+pClose.MouseButton1Click:Connect(function()
+    panel.Visible = false
+    panelOpen = false
 end)
 
--- Status list GUI
-local statusOpen = false
-local listBtn = Instance.new("TextButton")
-listBtn.Size               = UDim2.new(0, 150, 0, 30)
-listBtn.Position           = UDim2.new(0, 10, 0, 10)
-listBtn.BackgroundColor3   = Color3.fromRGB(50,50,50)
-listBtn.Text              = groupName .. " Status"
-listBtn.Parent             = screenGui
+-- Title
+local pTitle = Instance.new("TextLabel", panel)
+pTitle.Size, pTitle.Position = UDim2.new(1, -40, 0, 30), UDim2.new(0, 20, 0, 10)
+pTitle.BackgroundTransparency, pTitle.Font, pTitle.TextSize = 1, Enum.Font.SourceSansBold, 20
+pTitle.TextColor3, pTitle.Text = Color3.new(1,1,1), (_G.groupName or "Group").." Status"
 
-local listFrame = Instance.new("Frame")
-listFrame.Size             = UDim2.new(0, 300, 0, 400)
-listFrame.Position         = UDim2.new(0, 10, 0, 50)
-listFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
-listFrame.Visible          = false
-listFrame.Parent           = screenGui
+-- ScrollingFrame + auto-size children :contentReference[oaicite:7]{index=7}
+local scroll = Instance.new("ScrollingFrame", panel)
+scroll.Size, scroll.Position = UDim2.new(1, -20, 1, -60), UDim2.new(0, 10, 0, 50)
+scroll.BackgroundTransparency, scroll.CanvasSize = 1, UDim2.new(0,0,0,0)
+scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- auto-resize content :contentReference[oaicite:8]{index=8}
+scroll.ScrollBarImageTransparency = 0.5
 
-local scrolling = Instance.new("ScrollingFrame")
-scrolling.Size             = UDim2.new(1, -10, 1, -10)
-scrolling.Position         = UDim2.new(0,5,0,5)
-scrolling.CanvasSize       = UDim2.new(0,0,0,0)
-scrolling.ScrollBarThickness = 6
-scrolling.Parent           = listFrame
+local layout = Instance.new("UIListLayout", scroll)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 4)  -- spacing :contentReference[oaicite:9]{index=9}
 
-listBtn.MouseButton1Click:Connect(function()
-    statusOpen = not statusOpen
-    listFrame.Visible = statusOpen
-    if statusOpen then
-        -- fetch and populate
-        scrolling:ClearAllChildren()
-        local y = 0
-        for _, plr in ipairs(Players:GetPlayers()) do
-            local ok, _, _ = checkMember(plr)
-            local lbl = Instance.new("TextLabel")
-            lbl.Size               = UDim2.new(1, -10, 0, 25)
-            lbl.Position           = UDim2.new(0, 5, 0, y)
-            lbl.BackgroundTransparency = 1
-            lbl.Font               = Enum.Font.SourceSans
-            lbl.TextSize           = 16
-            lbl.TextColor3         = ok and Color3.fromRGB(100,255,100) or Color3.fromRGB(200,200,200)
-            lbl.Text               = string.format("%s - in-game: %s", plr.Name, ok and "Yes" or "No")
-            lbl.Parent             = scrolling
-            y = y + 25
-        end
-        scrolling.CanvasSize = UDim2.new(0,0,0,y)
+-- Populate panel entries
+local function updatePanel()
+    -- clear old
+    for _,c in ipairs(scroll:GetChildren()) do
+        if c.Name=="Entry" then c:Destroy() end
     end
-end)
+
+    local order = 1
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ok, rankN, role = isWatcher(plr)
+        if ok then
+            local entry = Instance.new("Frame")
+            entry.Name, entry.Parent = "Entry", scroll
+            entry.Size = UDim2.new(1, 0, 0, 36)
+            entry.LayoutOrder = order
+            order += 1
+            -- bg & rounding
+            entry.BackgroundTransparency = 0
+            entry.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            local corn = Instance.new("UICorner", entry)
+            corn.CornerRadius = UDim.new(0,6)
+
+            -- text
+            local t = Instance.new("TextLabel", entry)
+            t.Size, t.Position = UDim2.new(0.7, -10, 1, 0), UDim2.new(0, 10, 0, 0)
+            t.BackgroundTransparency, t.Font, t.TextSize = 1, Enum.Font.SourceSans, 16
+            t.TextColor3 = Color3.new(1,1,1)
+            t.Text = string.format("%s  [%d]\n%s #%d", plr.Name, plr.UserId, role, rankN)
+
+            -- status icon (in-game = green ●)
+            local icon = Instance.new("TextLabel", entry)
+            icon.Size, icon.Position = UDim2.new(0, 24, 0, 24), UDim2.new(1, -34, 0, 6)
+            icon.BackgroundTransparency, icon.Font, icon.TextSize = 1, Enum.Font.SourceSansBold, 24
+            icon.TextColor3 = Color3.new(0.3,1,0.3)
+            icon.Text = "●"
+        end
+    end
+end
+
+-- Keybind to toggle panel (K) :contentReference[oaicite:10]{index=10}
+ContextActionSvc:BindAction("TogglePanel", function(name, state)
+    if state==Enum.UserInputState.Begin then
+        panelOpen = not panelOpen
+        panel.Visible = panelOpen
+        if panelOpen then updatePanel() end
+    end
+    return Enum.ContextActionResult.Sink
+end, false, Enum.KeyCode.K)
+
+-- Also update panel live on join/leave
+Players.PlayerAdded:Connect(function() if panelOpen then updatePanel() end end)
+Players.PlayerRemoving:Connect(function() if panelOpen then updatePanel() end end)
