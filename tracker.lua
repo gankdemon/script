@@ -69,3 +69,42 @@ local function isWatcher(plr)
     local gid   = _G.groupId
     if not plr:IsInGroup(gid) then
         return false
+    end
+    local rankNum  = plr:GetRankInGroup(gid)
+    if rankNum < (_G.minRank or 0) then
+        return false
+    end
+    local roleName = plr:GetRoleInGroup(gid)
+    return true, rankNum, roleName
+end
+
+-- initial scan
+do
+    local found = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ok, rankNum, roleName = isWatcher(plr)
+        if ok then
+            table.insert(found, string.format("%s (%s #%d)", plr.Name, roleName, rankNum))
+        end
+    end
+    if #found > 0 then
+        showNotification(
+            (_G.groupName or "Group").." Online",
+            string.format("%d present:\n%s", #found, table.concat(found, ", "))
+        )
+    else
+        showNotification((_G.groupName or "Group").." Online", "None are here.")
+    end
+end
+
+-- real-time join alerts
+Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Wait()
+    local ok, rankNum, roleName = isWatcher(plr)
+    if ok then
+        showNotification(
+            (_G.groupName or "Group").." Join",
+            string.format("%s (%s #%d) has joined!", plr.Name, roleName, rankNum)
+        )
+    end
+end)
